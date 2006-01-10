@@ -7,15 +7,15 @@
 #
 # Copyright (c) 2006 Hirotaka Ogawa
 #
-package MT::Plugin::AddHatenaBookmark;
+package MT::Plugin::AddToHatenaBookmark;
 use strict;
 use MT;
 use base 'MT::Plugin';
 use vars qw($VERSION);
 $VERSION = '0.01';
 
-my $plugin = MT::Plugin::AddHatenaBookmark->new({
-    name => 'AddHatenaBookmark',
+my $plugin = MT::Plugin::AddToHatenaBookmark->new({
+    name => 'AddToHatenaBookmark',
     description => 'This plugin enables MT to post a hatena bookmark entry when updating published entries or adding newly published entries.',
     doc_link => 'http://as-is.net/blog/archives/001089.html',
     author_name => 'Hirotaka Ogawa',
@@ -108,7 +108,7 @@ sub template {
     my $tmpl = <<'EOT';
 <p>This plugin enables MT to post a hatena bookmark entry when updating published entries or adding newly published entries.</p>
 
-<p>For more details, see <a href="http://as-is.net/blog/archives/001089.html">"AddHatenaBookmark Plugin - Ogawa::Memoranda"</a>.</p>
+<p>For more details, see <a href="http://as-is.net/blog/archives/001089.html">"AddToHatenaBookmark Plugin - Ogawa::Memoranda"</a>.</p>
 
 <div class="setting">
 <div class="label"><label for="hatena_username">Hatena Username:</label></div>
