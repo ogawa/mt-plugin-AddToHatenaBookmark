@@ -12,7 +12,7 @@ use strict;
 use MT;
 use base 'MT::Plugin';
 use vars qw($VERSION);
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 my $plugin = MT::Plugin::AddToHatenaBookmark->new({
     name => 'AddToHatenaBookmark',
@@ -33,7 +33,6 @@ my $mt = MT->instance;
 MT->add_callback((ref $mt eq 'MT::App::CMS' ? 'AppPostEntrySave' : 'MT::Entry::post_save'),
 		 5, $plugin, \&post);
 
-use MT::Util qw(encode_html);
 use MT::Log;
 use MT::I18N;
 use XML::Atom::Entry;
@@ -41,19 +40,13 @@ use XML::Atom::Client;
 
 sub post {
     my ($eh, $app, $obj) = @_;
-    return if !UNIVERSAL::isa($obj, 'MT::Entry') || $obj->status != MT::Entry::RELEASE();
+    return unless $obj->isa('MT::Entry') && ($obj->status == MT::Entry::RELEASE());
 
     my $blog_id = $obj->blog_id;
 
-    my $config = $plugin->get_config_hash("blog:$blog_id") or return;
+    my $config = $plugin->get_config_hash('blog:' . $blog_id) or return;
     my $username = $config->{hatena_username} or return;
     my $password = $config->{hatena_password} or return;
-
-    my $comment = $obj->keywords ? keywords2comment($obj->keywords) : '';
-    if ($comment) {
-	my $enc = MT::ConfigMgr->instance->PublishCharset || 'utf-8';
-	$comment = MT::I18N::encode_text($comment, $enc, 'utf-8');
-    }
 
     my $link = XML::Atom::Link->new;
     $link->type('text/html');
@@ -63,45 +56,94 @@ sub post {
     my $entry = XML::Atom::Entry->new;
     $entry->title('dummy');
     $entry->add_link($link);
-    $entry->summary($comment) if $comment;
 
     my $hatena = XML::Atom::Client->new;
     $hatena->username($username);
     $hatena->password($password);
-    my $editURI = $hatena->createEntry('http://b.hatena.ne.jp/atom/post', $entry);
 
+    my $editURI = $hatena->createEntry('http://b.hatena.ne.jp/atom/post', $entry);
+    unless ($editURI) {
+	add_log($blog_id, 'createEntry failed: ' . $hatena->errstr);
+	return;
+    }
+
+    my $entry_old = $hatena->getEntry($editURI);
+    unless ($entry_old) {
+	add_log($blog_id, 'getEntry failed: ' . $hatena->errstr);
+	return;
+    }
+
+    my $title_old = $entry_old->title;
+    my $summary_old = extract_summary($entry_old);
+
+    my $title_new = $obj->blog->name . ': ' . $obj->title;
+    my $summary_new = keywords2summary($obj->keywords) || '';
+
+    my $enc = MT::ConfigMgr->instance->PublishCharset || 'utf-8';
+    $title_new = MT::I18N::encode_text($title_new, $enc, 'utf-8')
+	if $title_new;
+    $summary_new = MT::I18N::encode_text($summary_new, $enc, 'utf-8')
+	if $summary_new;
+
+    my $msg;
+    if ($title_old eq $title_new && $summary_old eq $summary_new) {
+	$msg = 'updateEntry skipped: ' . $editURI;
+    } else {
+	my $entry_new = XML::Atom::Entry->new;
+	$entry_new->title($title_new);
+	$entry_new->summary($summary_new) if $summary_new;
+
+	$msg = $hatena->updateEntry($editURI, $entry_new) ?
+	    'updateEntry suceeded: ' . $editURI :
+	    'updateEntry failed: ' . $hatena->errstr;
+    }
+    add_log($blog_id, $msg);
+}
+
+sub add_log {
+    my ($blog_id, $message) = @_;
     my $log = MT::Log->new;
     $log->blog_id($blog_id);
-    $log->message($editURI ?
-		  'Hatena request suceeded: ' . $editURI :
-		  'Hatena request failed: ' . $hatena->errstr);
+    $log->message('[' . $plugin->name . '] ' . $message);
     $log->save or die $log->errstr;
 }
 
-sub keywords2comment {
+# extract summary text from a hatena entry
+sub extract_summary {
+    my ($entry) = @_;
+    my $summary = '';
+    my $dc = XML::Atom::Namespace->new(dc => 'http://purl.org/dc/elements/1.1/');
+    for my $subject ($entry->getlist($dc, 'subject')) {
+	$summary .= '[' . $subject . ']';
+    }
+    $summary;
+}
+
+# convert MT keywords to summary text
+sub keywords2summary {
     my ($str) = @_;
     return '' unless $str;
     $str =~ s/\#.*$//g;
     $str =~ s/(^\s+|\s+$)//g;
     return '' unless $str;
 
-    my $comment = '';
+    my $summary = '';
     if ($str =~ m/[;,|]/) {
-	# tags separated by non-whitespaces
+	# separated by non-whitespaces
 	while ($str =~ m/(\[[^]]+\]|"[^"]+"|'[^']+'|[^;,|]+)/g) {
 	    my $tag = $1;
 	    $tag =~ s/(^[\["'\s;,|]+|[\]"'\s;,|]+$)//g;
-	    $comment .= '[' . $tag . ']' if $tag;
+	    $summary .= '[' . $tag . ']' if $tag;
 	}
     } else {
-	# tags separated by whitespaces
+	# separated by whitespaces
 	while ($str =~ m/(\[[^]]+\]|"[^"]+"|'[^']+'|[^\s]+)/g) {
 	    my $tag = $1;
 	    $tag =~ s/(^[\["'\s]+|[\]"'\s]+$)//g;
-	    $comment .= '[' . $tag . ']' if $tag;
+	    $summary .= '[' . $tag . ']' if $tag;
 	}
     }
-    $comment;
+    $summary;
 }
 
 sub template {
