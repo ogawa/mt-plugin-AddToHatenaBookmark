@@ -12,7 +12,7 @@ use strict;
 use MT;
 use base 'MT::Plugin';
 use vars qw($VERSION);
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 my $plugin = MT::Plugin::AddToHatenaBookmark->new({
     name => 'AddToHatenaBookmark',
@@ -77,7 +77,7 @@ sub post {
     my $summary_old = extract_summary($entry_old);
 
     my $title_new = $obj->blog->name . ': ' . $obj->title;
-    my $summary_new = keywords2summary($obj->keywords) || '';
+    my $summary_new = tags2summary($obj) || keywords2summary($obj->keywords) || '';
 
     my $enc = MT::ConfigMgr->instance->PublishCharset || 'utf-8';
     $title_new = MT::I18N::encode_text($title_new, $enc, 'utf-8')
@@ -142,6 +142,18 @@ sub keywords2summary {
 	    $tag =~ s/(^[\["'\s]+|[\]"'\s]+$)//g;
 	    $summary .= '[' . $tag . ']' if $tag;
 	}
+    }
+    $summary;
+}
+
+# convert MT tags to summary text
+sub tags2summary {
+    my $entry = shift;
+    return '' unless $entry->can('tags');
+
+    my $summary = '';
+    for my $tag ($entry->tags) {
+	$summary .= '[' . $tag . ']';
     }
     $summary;
 }
