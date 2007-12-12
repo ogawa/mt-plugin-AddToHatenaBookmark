@@ -35,8 +35,6 @@ MT->add_callback((ref $mt eq 'MT::App::CMS' ? 'AppPostEntrySave' : 'MT::Entry::p
 
 use MT::Log;
 use MT::I18N;
-use XML::Atom::Entry;
-use XML::Atom::Client;
 
 sub post {
     my ($eh, $app, $obj) = @_;
@@ -48,6 +46,8 @@ sub post {
     my $username = $config->{hatena_username} or return;
     my $password = $config->{hatena_password} or return;
 
+    require XML::Atom::Entry;
+    require XML::Atom::Client;
     my $link = XML::Atom::Link->new;
     $link->type('text/html');
     $link->rel('related');
